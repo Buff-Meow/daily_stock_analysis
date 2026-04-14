@@ -1,0 +1,108 @@
+name: Check Environment Variables
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: 'Test message'
+        required: false
+        default: 'Hello from workflow_dispatch'
+
+jobs:
+  check-variables:
+    runs-on: ubuntu-latest
+    outputs:
+      api_key_set: ${{ steps.check.outputs.api_key_set }}
+      api_base_set: ${{ steps.check.outputs.api_base_set }}
+      model_set: ${{ steps.check.outputs.model_set }}
+
+    steps:
+      - name: Check Environment Variables
+        id: check
+        run: |
+          echo "=== 检查环境变量配置 ==="
+          echo ""
+
+          # 检查 LLM_API_KEY
+          echo "1. LLM_API_KEY:"
+          if [ -n "${{ secrets.LLM_API_KEY }}" ]; then
+            echo "   ✅ 已设置 (值长度: ${#LLM_API_KEY} 字符)"
+            MASKED_KEY="${LLM_API_KEY:0:3}***${LLM_API_KEY: -3}"
+            echo "   值: $MASKED_KEY"
+            echo "api_key_set=true" >> $GITHUB_OUTPUT
+          else
+            echo "   ❌ 未设置"
+            echo "api_key_set=false" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+          # 检查 LLM_API_BASE
+          echo "2. LLM_API_BASE:"
+          if [ -n "${{ vars.LLM_API_BASE || secrets.LLM_API_BASE }}" ]; then
+            API_BASE="${{ vars.LLM_API_BASE || secrets.LLM_API_BASE }}"
+            echo "   ✅ 已设置"
+            echo "   值: $API_BASE"
+            echo "api_base_set=true" >> $GITHUB_OUTPUT
+          else
+            echo "   ❌ 未设置"
+            echo "api_base_set=false" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+          # 检查 LLM_MODEL
+          echo "3. LLM_MODEL:"
+          if [ -n "${{ vars.LLM_MODEL || secrets.LLM_MODEL }}" ]; then
+            MODEL="${{ vars.LLM_MODEL || secrets.LLM_MODEL }}"
+            echo "   ✅ 已设置"
+            echo "   值: $MODEL"
+            echo "model_set=true" >> $GITHUB_OUTPUT
+          else
+            echo "   ❌ 未设置"
+            echo "model_set=false" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check Python Environment Variables
+        run: |
+          python3 << 'EOF'
+import os
+import json
+
+print("=== Python 程序环境变量检查 ===")
+print()
+
+vars_to_check = [
+    ('LLM_API_KEY', True),
+    ('LLM_API_BASE', False),
+    ('LLM_MODEL', False)
+]
+
+results = {}
+for var_name, is_secret in vars_to_check:
+    value = os.environ.get(var_name, '')
+    if value:
+        if is_secret and len(value) > 6:
+            masked = value[:3] + '***' + value[-3:]
+        else:
+            masked = value
+        print(f"✅ {var_name}: {masked}")
+        results[var_name] = 'set'
+    else:
+        print(f"❌ {var_name}: 未设置")
+        results[var_name] = 'not_set'
+
+print()
+print("=== 检查结果汇总 ===")
+print(json.dumps(results, indent=2))
+EOF
+
+      - name: Summary
+        run: |
+          echo "## 环境变量检查结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 变量名 | 状态 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| LLM_API_KEY | $([ -n "${{ secrets.LLM_API_KEY }}" ] && echo "✅ 已设置" || echo "❌ 未设置") |" >> $GITHUB_STEP_SUMMARY
+          echo "| LLM_API_BASE | $([ -n "${{ vars.LLM_API_BASE || secrets.LLM_API_BASE }}" ] && echo "✅ 已设置" || echo "❌ 未设置") |" >> $GITHUB_STEP_SUMMARY
+          echo "| LLM_MODEL | $([ -n "${{ vars.LLM_MODEL || secrets.LLM_MODEL }}" ] && echo "✅ 已设置" || echo "❌ 未设置") |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
